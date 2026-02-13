@@ -284,6 +284,46 @@
     color: var(--text-primary);
   }
 
+  .msg-content strong {
+    color: var(--orange);
+    font-weight: 600;
+  }
+
+  .msg-content p {
+    margin-bottom: 12px;
+  }
+
+  .msg-content ol, .msg-content ul {
+    margin: 12px 0;
+    padding-left: 24px;
+  }
+
+  .msg-content li {
+    margin-bottom: 8px;
+  }
+
+  .msg-content code {
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+  }
+
+  .msg-content pre {
+    background: var(--surface);
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+
+  .msg-content h1, .msg-content h2, .msg-content h3 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
   /* ── Thinking ───────────────────────────────────────────── */
   .thinking {
     max-width: 700px;
@@ -488,7 +528,7 @@
     div.className = 'message';
     div.innerHTML = `
       <div class="avatar user">You</div>
-      <div class="msg-content">${escapeHtml(text)}</div>`;
+      <div class="msg-content">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
     document.getElementById('messages').appendChild(div);
     scrollToBottom();
   }
@@ -522,7 +562,7 @@
     div.className = 'message';
     div.innerHTML = `
       <div class="avatar bot">⬡</div>
-      <div class="msg-content">${text}</div>`;
+      <div class="msg-content">${formatMarkdown(text)}</div>`;
     document.getElementById('messages').appendChild(div);
     scrollToBottom();
   }
@@ -558,7 +598,33 @@
   }
 
   function escapeHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function formatMarkdown(text) {
+    // Escape HTML first
+    let formatted = escapeHtml(text);
+    
+    // Convert **bold** to <strong>
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    
+    // Convert numbered lists (1. , 2. , etc.)
+    formatted = formatted.replace(/^(\d+)\.\s+(.+)$/gm, '<li>$2</li>');
+    
+    // Wrap consecutive <li> in <ol>
+    formatted = formatted.replace(/(<li>.*<\/li>\n?)+/g, function(match) {
+      return '<ol>' + match + '</ol>';
+    });
+    
+    // Convert line breaks to paragraphs
+    formatted = formatted.split('\n\n').map(para => {
+      if (para.trim() && !para.includes('<ol>') && !para.includes('<li>')) {
+        return '<p>' + para.replace(/\n/g, '<br>') + '</p>';
+      }
+      return para;
+    }).join('\n');
+    
+    return formatted;
   }
 
   // Connection check
