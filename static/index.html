@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>MCP Chatbot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
@@ -26,8 +28,25 @@
     background: var(--bg);
     color: var(--text-primary);
     height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile */
     display: flex;
     overflow: hidden;
+    position: fixed;
+    width: 100%;
+    top: 0;
+    left: 0;
+  }
+
+  /* Android keyboard fix */
+  html {
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* Prevent zoom on input focus (Android) */
+  input, textarea, select {
+    font-size: 16px !important;
   }
 
   /* ── Mobile Responsive ──────────────────────────────────── */
@@ -105,6 +124,24 @@
     
     .input-area {
       padding: 0 12px 12px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+    }
+    
+    /* Android keyboard fix - ensure input stays visible */
+    .input-container {
+      position: relative;
+      width: 100%;
+    }
+    
+    .input-field {
+      font-size: 16px !important; /* Prevent zoom */
+      min-height: 44px; /* Better touch target */
+    }
+    
+    /* Prevent background scrolling when keyboard is open */
+    body.keyboard-open {
+      position: fixed;
+      width: 100%;
     }
   }
 
@@ -354,9 +391,12 @@
   /* ── Input ──────────────────────────────────────────────── */
   .input-area {
     padding: 0 20px 20px;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
     max-width: 740px;
     margin: 0 auto;
     width: 100%;
+    position: relative;
+    z-index: 10;
   }
 
   .input-container {
@@ -368,6 +408,7 @@
     align-items: flex-end;
     gap: 12px;
     transition: border-color 0.2s;
+    position: relative;
   }
   .input-container:focus-within {
     border-color: var(--orange);
@@ -379,11 +420,13 @@
     border: none;
     outline: none;
     color: var(--text-primary);
-    font-size: 15px;
+    font-size: 16px; /* Prevents zoom on Android */
     font-family: inherit;
     resize: none;
     max-height: 120px;
     line-height: 1.5;
+    -webkit-appearance: none; /* Remove iOS styling */
+    touch-action: manipulation; /* Improve touch response */
   }
   .input-field::placeholder { color: var(--text-muted); }
 
@@ -608,23 +651,44 @@
     // Convert **bold** to <strong>
     formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     
-    // Convert numbered lists (1. , 2. , etc.)
-    formatted = formatted.replace(/^(\d+)\.\s+(.+)$/gm, '<li>$2</li>');
+    // Split into lines to process numbered lists properly
+    let lines = formatted.split('\n');
+    let result = [];
+    let inList = false;
     
-    // Wrap consecutive <li> in <ol>
-    formatted = formatted.replace(/(<li>.*<\/li>\n?)+/g, function(match) {
-      return '<ol>' + match + '</ol>';
-    });
-    
-    // Convert line breaks to paragraphs
-    formatted = formatted.split('\n\n').map(para => {
-      if (para.trim() && !para.includes('<ol>') && !para.includes('<li>')) {
-        return '<p>' + para.replace(/\n/g, '<br>') + '</p>';
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      
+      // Check if line starts with a number followed by period and space
+      if (/^\d+\.\s+/.test(line)) {
+        if (!inList) {
+          result.push('<ol>');
+          inList = true;
+        }
+        // Remove the number and period, wrap in <li>
+        let content = line.replace(/^\d+\.\s+/, '');
+        result.push('<li>' + content + '</li>');
+      } else {
+        if (inList) {
+          result.push('</ol>');
+          inList = false;
+        }
+        
+        // Regular line - preserve it
+        if (line.trim()) {
+          result.push('<p>' + line + '</p>');
+        } else {
+          result.push('');
+        }
       }
-      return para;
-    }).join('\n');
+    }
     
-    return formatted;
+    // Close list if still open
+    if (inList) {
+      result.push('</ol>');
+    }
+    
+    return result.join('\n');
   }
 
   // Connection check
@@ -658,6 +722,33 @@
         closeSidebar();
       }
     }
+  });
+
+  // Android keyboard handling - scroll input into view
+  const inputField = document.getElementById('inputField');
+  
+  inputField.addEventListener('focus', function() {
+    // Small delay to let keyboard appear
+    setTimeout(() => {
+      // Scroll input into view for Android
+      this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.body.classList.add('keyboard-open');
+    }, 300);
+  });
+  
+  inputField.addEventListener('blur', function() {
+    document.body.classList.remove('keyboard-open');
+  });
+
+  // Prevent viewport resize issues on Android
+  let lastHeight = window.innerHeight;
+  window.addEventListener('resize', function() {
+    const currentHeight = window.innerHeight;
+    // Only handle significant height changes (keyboard)
+    if (Math.abs(currentHeight - lastHeight) > 150) {
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+    lastHeight = currentHeight;
   });
 </script>
 </body>
