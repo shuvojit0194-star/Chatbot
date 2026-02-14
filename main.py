@@ -193,6 +193,8 @@ Rules:
 - Use only retrieved content; do not invent facts.
 - Be concise, structured, and directly address the question.
 - If sources conflict, mention the disagreement briefly.
+- When using numbered lists, ALWAYS use sequential numbers: 1. 2. 3. 4. 5. (NOT all 1.)
+- Format lists properly with each item on a new line.
 
 3) GROUNDEDNESS REQUIREMENT
 Every factual claim must be supported by retrieved evidence.
