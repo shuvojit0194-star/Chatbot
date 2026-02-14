@@ -333,10 +333,17 @@
   .msg-content ol, .msg-content ul {
     margin: 12px 0;
     padding-left: 24px;
+    list-style-position: outside;
+  }
+
+  .msg-content ol {
+    list-style-type: decimal;
+    counter-reset: item;
   }
 
   .msg-content li {
     margin-bottom: 8px;
+    display: list-item;
   }
 
   .msg-content code {
