@@ -454,6 +454,84 @@
   .send-btn:hover { background: var(--orange-hover); }
   .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .send-btn svg { width: 16px; height: 16px; }
+
+  /* ── Weather Widget ─────────────────────────────────────────── */
+  .weather-widget {
+    margin-top: 24px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .weather-skeleton {
+    width: 220px;
+    height: 72px;
+    background: linear-gradient(90deg, var(--surface) 25%, var(--hover) 50%, var(--surface) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 12px;
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .weather-error {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .weather-retry-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+  }
+  .weather-retry-btn:hover { background: var(--hover); color: var(--text-primary); }
+
+  .weather-data {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 20px;
+  }
+
+  .weather-icon { font-size: 36px; line-height: 1; }
+
+  .weather-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .weather-temp {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .weather-condition {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .weather-location {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
 </style>
 </head>
 <body>
@@ -500,6 +578,21 @@
         A helpful AI assistant powered by the Model Context Protocol.
         Ask me anything about MCP's capabilities, architecture, or how to build with it.
       </p>
+      <div class="weather-widget" id="weatherWidget">
+        <div id="weatherLoading"><div class="weather-skeleton"></div></div>
+        <div class="weather-error" id="weatherError" style="display:none">
+          <span>⚠️ Unable to load weather</span>
+          <button class="weather-retry-btn" onclick="fetchWeather()">Retry</button>
+        </div>
+        <div class="weather-data" id="weatherData" style="display:none">
+          <div class="weather-icon" id="weatherIcon"></div>
+          <div class="weather-info">
+            <div class="weather-temp" id="weatherTemp"></div>
+            <div class="weather-condition" id="weatherCondition"></div>
+            <div class="weather-location" id="weatherLocation"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -639,7 +732,23 @@
           A helpful AI assistant powered by the Model Context Protocol.
           Ask me anything about MCP's capabilities, architecture, or how to build with it.
         </p>
+        <div class="weather-widget" id="weatherWidget">
+          <div id="weatherLoading"><div class="weather-skeleton"></div></div>
+          <div class="weather-error" id="weatherError" style="display:none">
+            <span>⚠️ Unable to load weather</span>
+            <button class="weather-retry-btn" onclick="fetchWeather()">Retry</button>
+          </div>
+          <div class="weather-data" id="weatherData" style="display:none">
+            <div class="weather-icon" id="weatherIcon"></div>
+            <div class="weather-info">
+              <div class="weather-temp" id="weatherTemp"></div>
+              <div class="weather-condition" id="weatherCondition"></div>
+              <div class="weather-location" id="weatherLocation"></div>
+            </div>
+          </div>
+        </div>
       </div>`;
+    fetchWeather();
     document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
   }
 
@@ -748,7 +857,69 @@
     document.body.classList.remove('keyboard-open');
   });
 
-  // Prevent viewport resize issues on Android
+  // ── Weather Widget ────────────────────────────────────────────
+  const WMO_ICONS = {
+    0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
+    45: '🌫️', 48: '🌫️',
+    51: '🌦️', 53: '🌦️', 55: '🌦️',
+    61: '🌧️', 63: '🌧️', 65: '🌧️',
+    71: '🌨️', 73: '🌨️', 75: '🌨️',
+    80: '🌧️', 81: '🌧️', 82: '🌧️',
+    85: '🌨️', 86: '🌨️',
+    95: '⛈️', 96: '⛈️', 99: '⛈️'
+  };
+
+  const WMO_LABELS = {
+    0: 'Clear Sky', 1: 'Mainly Clear', 2: 'Partly Cloudy', 3: 'Overcast',
+    45: 'Foggy', 48: 'Icy Fog',
+    51: 'Light Drizzle', 53: 'Drizzle', 55: 'Heavy Drizzle',
+    61: 'Light Rain', 63: 'Rain', 65: 'Heavy Rain',
+    71: 'Light Snow', 73: 'Snow', 75: 'Heavy Snow',
+    80: 'Rain Showers', 81: 'Heavy Showers', 82: 'Violent Showers',
+    85: 'Snow Showers', 86: 'Heavy Snow Showers',
+    95: 'Thunderstorm', 96: 'Thunderstorm with Hail', 99: 'Heavy Thunderstorm'
+  };
+
+  const DEFAULT_LOCATION = { name: 'St. Louis, MO', lat: 38.6270, lon: -90.1994 };
+
+  async function fetchWeather() {
+    const loc = DEFAULT_LOCATION;
+    const loading = document.getElementById('weatherLoading');
+    const errorEl = document.getElementById('weatherError');
+    const dataEl  = document.getElementById('weatherData');
+    if (!loading) return;
+
+    loading.style.display = 'block';
+    errorEl.style.display = 'none';
+    dataEl.style.display  = 'none';
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/weather?lat=${loc.lat}&lon=${loc.lon}&units=fahrenheit`);
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const data = await res.json();
+
+      const code  = data.weathercode ?? 0;
+      const isDay = data.is_day ?? 1;
+      const icon  = (code === 0 && !isDay) ? '🌙' : (WMO_ICONS[code] ?? '🌡️');
+      const label = WMO_LABELS[code] ?? 'Unknown';
+      const temp  = data.temperature !== null ? `${Math.round(data.temperature)}°F` : '--';
+
+      document.getElementById('weatherIcon').textContent      = icon;
+      document.getElementById('weatherTemp').textContent      = temp;
+      document.getElementById('weatherCondition').textContent = label;
+      document.getElementById('weatherLocation').textContent  = loc.name;
+
+      loading.style.display = 'none';
+      dataEl.style.display  = 'flex';
+    } catch {
+      loading.style.display = 'none';
+      errorEl.style.display = 'flex';
+    }
+  }
+
+  fetchWeather();
+
+  // ── Prevent viewport resize issues on Android
   let lastHeight = window.innerHeight;
   window.addEventListener('resize', function() {
     const currentHeight = window.innerHeight;

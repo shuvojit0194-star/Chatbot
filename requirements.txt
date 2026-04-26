@@ -21,3 +21,4 @@ faiss-cpu
 
 # Utilities
 python-dotenv
+httpx
