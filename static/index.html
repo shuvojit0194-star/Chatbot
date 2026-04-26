@@ -859,7 +859,8 @@
 
   // ── Weather Widget ────────────────────────────────────────────
   const WMO_ICONS = {
-    0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
+    0: '☀️',
+    1: '⛅', 2: '⛅', 3: '⛅',
     45: '🌫️', 48: '🌫️',
     51: '🌦️', 53: '🌦️', 55: '🌦️',
     61: '🌧️', 63: '🌧️', 65: '🌧️',
@@ -879,6 +880,15 @@
     85: 'Snow Showers', 86: 'Heavy Snow Showers',
     95: 'Thunderstorm', 96: 'Thunderstorm with Hail', 99: 'Heavy Thunderstorm'
   };
+
+  function getWeatherIcon(code, isDay) {
+    if (code === 0 && !isDay) return '🌙';
+    return WMO_ICONS[code] ?? '🌡️';
+  }
+
+  function getWeatherLabel(code) {
+    return WMO_LABELS[code] ?? 'Unknown';
+  }
 
   const DEFAULT_LOCATION = { name: 'St. Louis, MO', lat: 38.6270, lon: -90.1994 };
 
@@ -900,8 +910,8 @@
 
       const code  = data.weathercode ?? 0;
       const isDay = data.is_day ?? 1;
-      const icon  = (code === 0 && !isDay) ? '🌙' : (WMO_ICONS[code] ?? '🌡️');
-      const label = WMO_LABELS[code] ?? 'Unknown';
+      const icon  = getWeatherIcon(code, isDay);
+      const label = getWeatherLabel(code);
       const temp  = data.temperature !== null ? `${Math.round(data.temperature)}°F` : '--';
 
       document.getElementById('weatherIcon').textContent      = icon;
