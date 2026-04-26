@@ -5,9 +5,12 @@ This is the production version of your Colab notebook, packaged for deployment.
 
 import os
 import json
+import time
 import warnings
 from typing import Any, Dict, List, Optional
 from contextlib import asynccontextmanager
+
+import httpx
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -38,6 +41,10 @@ except Exception:
 agent     = None
 rag_chain = None
 retriever = None
+
+# ── Weather cache (30-minute TTL, keyed by lat/lon/units) ────────
+_weather_cache: Dict[str, Any] = {}
+_WEATHER_CACHE_TTL = 1800
 
 
 # ── Your exact helper functions from the notebook ────────────────
@@ -261,6 +268,50 @@ async def chat(req: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Weather endpoint ─────────────────────────────────────────────
+@app.get("/weather")
+async def get_weather(lat: float, lon: float, units: str = "fahrenheit"):
+    cache_key = f"weather_{lat}_{lon}_{units}"
+    now = time.time()
+
+    if cache_key in _weather_cache:
+        entry = _weather_cache[cache_key]
+        if now - entry["ts"] < _WEATHER_CACHE_TTL:
+            return entry["data"]
+
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "current": "temperature_2m,weathercode,windspeed_10m,relativehumidity_2m,apparent_temperature,is_day",
+        "temperature_unit": units,
+        "windspeed_unit": "mph",
+        "timezone": "auto",
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://api.open-meteo.com/v1/forecast", params=params, timeout=10
+            )
+            r.raise_for_status()
+            raw = r.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Weather API error: {e}")
+
+    current = raw.get("current", {})
+    result = {
+        "temperature": current.get("temperature_2m"),
+        "weathercode": current.get("weathercode"),
+        "windspeed":   current.get("windspeed_10m"),
+        "humidity":    current.get("relativehumidity_2m"),
+        "feels_like":  current.get("apparent_temperature"),
+        "is_day":      current.get("is_day"),
+        "units":       units,
+        "timezone":    raw.get("timezone"),
+    }
+    _weather_cache[cache_key] = {"ts": now, "data": result}
+    return result
 
 
 # ── Health check ─────────────────────────────────────────────────
