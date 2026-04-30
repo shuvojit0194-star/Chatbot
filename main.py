@@ -314,6 +314,54 @@ async def get_weather(lat: float, lon: float, units: str = "fahrenheit"):
     return result
 
 
+# ── Reverse-geocode endpoint (Nominatim) ─────────────────────────
+@app.get("/weather/location")
+async def get_location_name(lat: float, lon: float):
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={"lat": lat, "lon": lon, "format": "json"},
+                headers={"User-Agent": "AgentAssistant/1.0"},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json()
+        addr = data.get("address", {})
+        city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("county") or "Unknown"
+        state = addr.get("state", "")
+        country_code = addr.get("country_code", "").upper()
+        name = f"{city}, {state}" if country_code == "US" and state else (f"{city}, {country_code}" if country_code else city)
+        return {"name": name, "latitude": lat, "longitude": lon}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Geocoding error: {e}")
+
+
+# ── City search endpoint (Open-Meteo geocoding) ───────────────────
+@app.get("/weather/search")
+async def search_location(q: str):
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params={"name": q, "count": 5, "language": "en", "format": "json"},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json()
+        results = []
+        for item in data.get("results", []):
+            parts = [item.get("name", ""), item.get("admin1", ""), item.get("country", "")]
+            results.append({
+                "name":      ", ".join(p for p in parts if p),
+                "latitude":  item.get("latitude"),
+                "longitude": item.get("longitude"),
+            })
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Search error: {e}")
+
+
 # ── Health check ─────────────────────────────────────────────────
 @app.get("/health")
 async def health():

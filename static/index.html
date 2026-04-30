@@ -497,6 +497,35 @@
   }
   .weather-retry-btn:hover { background: var(--hover); color: var(--text-primary); }
 
+  .weather-location-prompt {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .city-search-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .city-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+    padding: 6px 12px;
+    font-family: inherit;
+    outline: none;
+    width: 160px;
+  }
+  .city-input:focus { border-color: var(--orange); }
+
+  .city-search-error { font-size: 12px; color: var(--text-muted); }
+
   .weather-data {
     display: flex;
     align-items: center;
@@ -583,6 +612,15 @@
         <div class="weather-error" id="weatherError" style="display:none">
           <span>⚠️ Unable to load weather</span>
           <button class="weather-retry-btn" onclick="fetchWeather()">Retry</button>
+        </div>
+        <div class="weather-location-prompt" id="weatherLocationPrompt" style="display:none">
+          <span>📍 Enter your city for weather</span>
+          <div class="city-search-form">
+            <input type="text" id="cityInput" class="city-input" placeholder="e.g. New York"
+                   onkeydown="if(event.key==='Enter') submitManualCity()" />
+            <button class="weather-retry-btn" onclick="submitManualCity()">Go</button>
+          </div>
+          <span class="city-search-error" id="citySearchError" style="display:none">City not found. Try again.</span>
         </div>
         <div class="weather-data" id="weatherData" style="display:none">
           <div class="weather-icon" id="weatherIcon"></div>
@@ -738,6 +776,15 @@
             <span>⚠️ Unable to load weather</span>
             <button class="weather-retry-btn" onclick="fetchWeather()">Retry</button>
           </div>
+          <div class="weather-location-prompt" id="weatherLocationPrompt" style="display:none">
+            <span>📍 Enter your city for weather</span>
+            <div class="city-search-form">
+              <input type="text" id="cityInput" class="city-input" placeholder="e.g. New York"
+                     onkeydown="if(event.key==='Enter') submitManualCity()" />
+              <button class="weather-retry-btn" onclick="submitManualCity()">Go</button>
+            </div>
+            <span class="city-search-error" id="citySearchError" style="display:none">City not found. Try again.</span>
+          </div>
           <div class="weather-data" id="weatherData" style="display:none">
             <div class="weather-icon" id="weatherIcon"></div>
             <div class="weather-info">
@@ -748,7 +795,7 @@
           </div>
         </div>
       </div>`;
-    fetchWeather();
+    initWeather();
     document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
   }
 
@@ -890,44 +937,97 @@
     return WMO_LABELS[code] ?? 'Unknown';
   }
 
-  const DEFAULT_LOCATION = { name: 'St. Louis, MO', lat: 38.6270, lon: -90.1994 };
+  const FALLBACK_LOCATION = { name: 'St. Louis, MO', latitude: 38.6270, longitude: -90.1994 };
+  const LOCATION_KEY = 'weather_location';
 
-  async function fetchWeather() {
-    const loc = DEFAULT_LOCATION;
-    const loading = document.getElementById('weatherLoading');
-    const errorEl = document.getElementById('weatherError');
-    const dataEl  = document.getElementById('weatherData');
-    if (!loading) return;
+  function getStoredLocation() {
+    try { return JSON.parse(localStorage.getItem(LOCATION_KEY)); } catch { return null; }
+  }
 
-    loading.style.display = 'block';
-    errorEl.style.display = 'none';
-    dataEl.style.display  = 'none';
+  function saveLocation(loc) {
+    try { localStorage.setItem(LOCATION_KEY, JSON.stringify(loc)); } catch {}
+  }
 
+  function showWeatherState(state) {
+    ['weatherLoading', 'weatherError', 'weatherData', 'weatherLocationPrompt'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    const el = document.getElementById(state);
+    if (el) el.style.display = state === 'weatherLoading' ? 'block' : 'flex';
+  }
+
+  async function fetchWeather(loc) {
+    const location = loc || getStoredLocation() || FALLBACK_LOCATION;
+    if (!document.getElementById('weatherLoading')) return;
+    showWeatherState('weatherLoading');
     try {
-      const res = await fetch(`${API_BASE_URL}/weather?lat=${loc.lat}&lon=${loc.lon}&units=fahrenheit`);
+      const units = localStorage.getItem('weather_units') || 'fahrenheit';
+      const res = await fetch(`${API_BASE_URL}/weather?lat=${location.latitude}&lon=${location.longitude}&units=${units}`);
       if (!res.ok) throw new Error(`Status ${res.status}`);
       const data = await res.json();
-
-      const code  = data.weathercode ?? 0;
+      const code = data.weathercode ?? 0;
       const isDay = data.is_day ?? 1;
-      const icon  = getWeatherIcon(code, isDay);
-      const label = getWeatherLabel(code);
-      const temp  = data.temperature !== null ? `${Math.round(data.temperature)}°F` : '--';
-
-      document.getElementById('weatherIcon').textContent      = icon;
-      document.getElementById('weatherTemp').textContent      = temp;
-      document.getElementById('weatherCondition').textContent = label;
-      document.getElementById('weatherLocation').textContent  = loc.name;
-
-      loading.style.display = 'none';
-      dataEl.style.display  = 'flex';
+      const unit = units === 'fahrenheit' ? 'F' : 'C';
+      document.getElementById('weatherIcon').textContent      = getWeatherIcon(code, isDay);
+      document.getElementById('weatherTemp').textContent      = data.temperature !== null ? `${Math.round(data.temperature)}°${unit}` : '--';
+      document.getElementById('weatherCondition').textContent = getWeatherLabel(code);
+      document.getElementById('weatherLocation').textContent  = location.name;
+      showWeatherState('weatherData');
     } catch {
-      loading.style.display = 'none';
-      errorEl.style.display = 'flex';
+      showWeatherState('weatherError');
     }
   }
 
-  fetchWeather();
+  async function initWeatherLocation() {
+    if (!navigator.geolocation) { showWeatherState('weatherLocationPrompt'); return; }
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(`${API_BASE_URL}/weather/location?lat=${latitude}&lon=${longitude}`);
+          if (!res.ok) throw new Error();
+          const loc = await res.json();
+          saveLocation(loc);
+          fetchWeather(loc);
+        } catch {
+          const loc = { name: 'My Location', latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+          saveLocation(loc);
+          fetchWeather(loc);
+        }
+      },
+      () => showWeatherState('weatherLocationPrompt'),
+      { timeout: 10000 }
+    );
+  }
+
+  async function submitManualCity() {
+    const input = document.getElementById('cityInput');
+    const q = input ? input.value.trim() : '';
+    if (!q) return;
+    const errEl = document.getElementById('citySearchError');
+    if (errEl) errEl.style.display = 'none';
+    showWeatherState('weatherLoading');
+    try {
+      const res = await fetch(`${API_BASE_URL}/weather/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const first = data.results?.[0];
+      if (!first) throw new Error('No results');
+      saveLocation(first);
+      fetchWeather(first);
+    } catch {
+      showWeatherState('weatherLocationPrompt');
+      if (errEl) errEl.style.display = 'block';
+    }
+  }
+
+  function initWeather() {
+    const stored = getStoredLocation();
+    if (stored) { fetchWeather(stored); } else { initWeatherLocation(); }
+  }
+
+  initWeather();
 
   // ── Prevent viewport resize issues on Android
   let lastHeight = window.innerHeight;
